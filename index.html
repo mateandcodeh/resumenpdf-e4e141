@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="msapplication-tap-highlight" content="no">
+    <title>PDF Summarizer - Capacitor</title>
+    
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+        }
+        
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+        }
+        
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+        
+        input, textarea {
+            -webkit-user-select: text;
+            user-select: text;
+        }
+        
+        .glass {
+            background: rgba(255, 255, 255, 0.97);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .glass-dark {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+        
+        .btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(0);
+        }
+        
+        .btn:active {
+            transform: scale(0.96) translateY(1px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .card-hover:active {
+            transform: scale(0.98);
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .animate-slide-up {
+            animation: slideUp 0.4s ease;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
+        }
+        
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite;
+        }
+        
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 50;
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+        }
+        
+        .modal.show {
+            display: flex;
+        }
+        
+        .modal-content {
+            width: 100%;
+            max-width: 600px;
+            max-height: 85vh;
+            overflow-y: auto;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .modal.show .modal-content {
+            transform: translateY(0);
+        }
+        
+        @media (min-width: 768px) {
+            .modal {
+                align-items: center;
+            }
+            .modal-content {
+                transform: scale(0.9);
+                border-radius: 16px;
+            }
+            .modal.show .modal-content {
+                transform: scale(1);
+            }
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #1e293b;
+            color: white;
+            padding: 14px 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 9999;
+            max-width: 90%;
+            font-size: 14px;
+        }
+        
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+        
+        .tab-active {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: white;
+        }
+        
+        @media (max-width: 390px) {
+            .text-responsive {
+                font-size: 13px;
+            }
+        }
+    </style>
+<style id="lf-tema">html,body{background:#ffffff !important;color:#1a1a1a !important;font-family:ui-monospace,Menlo,Consolas,monospace !important;font-size:19px !important}</style></head>
+<body>
+    <div class="min-h-screen pb-20">
+        <!-- Header -->
+        <header class="glass-dark sticky top-0 z-40 px-4 py-4 mb-4">
+            <div class="max-w-4xl mx-auto">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">PDF Summarizer</h1>
+                        <p class="text-slate-400 text-xs mt-0.5" id="platform-badge">Cargando...</p>
+                    </div>
+                    <button onclick="showSettings()" class="btn w-10 h-10 rounded-lg glass flex items-center justify-center">
+                        <svg class="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-4xl mx-auto px-4">
+            <!-- Tabs -->
+            <div class="glass rounded-2xl p-1.5 mb-4 flex gap-1">
+                <button onclick="switchTab('upload')" class="tab-btn flex-1 py-3 rounded-xl text-sm font-medium transition-all tab-active" data-tab="upload">
+                    Resumir PDF
+                </button>
+                <button onclick="switchTab('history')" class="tab-btn flex-1 py-3 rounded-xl text-sm font-medium transition-all text-slate-600" data-tab="history">
+                    Historial
+                </button>
+            </div>
+
+            <!-- Tab: Upload -->
+            <div id="tab-upload" class="tab-content">
+                <!-- Upload Card -->
+                <div class="glass rounded-2xl p-5 mb-4 animate-slide-up">
+                    <div id="upload-zone" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-500 transition-colors">
+                        <svg class="w-16 h-16 mx-auto mb-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <p class="text-slate-700 font-medium mb-1">Selecciona o arrastra un PDF</p>
+                        <p class="text-slate-500 text-xs">Soporta texto y documentos escaneados</p>
+                        <input type="file" id="file-input" accept=".pdf" class="hidden">
+                    </div>
+                    
+                    <div id="file-info" class="hidden mt-4 p-4 bg-blue-50 rounded-xl">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-medium text-slate-800 truncate" id="file-name"></p>
+                                <p class="text-xs text-slate-600 mt-0.5" id="file-size"></p>
+                            </div>
+                            <button onclick="clearFile()" class="text-slate-500 hover:text-red-600">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processing Options -->
+                <div class="glass rounded-2xl p-5 mb-4">
+                    <h3 class="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                        </svg>
+                        Opciones de Extracción
+                    </h3>
+                    
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
+                            <input type="radio" name="extract-mode" value="auto" checked class="w-4 h-4 text-blue-600">
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-slate-800">Automático</p>
+                                <p class="text-xs text-slate-600">Detecta texto o usa OCR si es imagen</p>
+                            </div>
+                        </label>
+                        
+                        <label class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
+                            <input type="radio" name="extract-mode" value="text" class="w-4 h-4 text-blue-600">
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-slate-800">Solo Texto</p>
+                                <p class="text-xs text-slate-600">Más rápido, PDFs con texto seleccionable</p>
+                            </div>
+                        </label>
+                        
+                        <label class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
+                            <input type="radio" name="extract-mode" value="ocr" class="w-4 h-4 text-blue-600">
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-slate-800">OCR Forzado</p>
+                                <p class="text-xs text-slate-600">Para PDFs escaneados/fotos de libros</p>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="mt-4">
+                        <label class="text-sm font-medium text-slate-700 block mb-2">Idioma OCR</label>
+                        <select id="ocr-lang" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="spa">Español</option>
+                            <option value="eng">Inglés</option>
+                            <option value="spa+eng">Español + Inglés</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Process Button -->
+                <button id="process-btn" onclick="processPDF()" disabled class="btn w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-4 rounded-xl shadow-lg shadow-blue-500/30">
+                    <span id="process-btn-text">Selecciona un PDF primero</span>
+                </button>
+
+                <!-- Progress -->
+                <div id="progress-container" class="hidden glass rounded-2xl p-5 mt-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-slate-700" id="progress-text">Procesando...</span>
+                        <span class="text-sm font-bold text-blue-600" id="progress-percent">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                        <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-2" id="progress-detail"></p>
+                </div>
+
+                <!-- Result -->
+                <div id="result-container" class="hidden glass rounded-2xl p-5 mt-4 animate-slide-up">
+                    <div class="flex items-start justify-between mb-4">
+                        <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Resumen Generado
+                        </h3>
+                        <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full" id="result-stats"></span>
+                    </div>
+                    
+                    <div id="summary-content" class="prose prose-sm max-w-none text-slate-700 bg-slate-50 rounded-lg p-4 mb-4 whitespace-pre-wrap"></div>
+                    
+                    <div class="flex gap-2">
+                        <button onclick="copySummary()" class="btn flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 rounded-lg text-sm flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                            Copiar
+                        </button>
+                        <button onclick="shareSummary()" class="btn flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg text-sm flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                            </svg>
+                            Compartir
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: History -->
+            <div id="tab-history" class="tab-content hidden">
+                <div class="glass rounded-2xl p-5 mb-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-semibold text-slate-800">Resúmenes Guardados</h3>
+                        <button onclick="clearHistory()" class="text-xs text-red-600 hover:text-red-700 font-medium">Limpiar todo</button>
+                    </div>
+                    <div id="history-list" class="space-y-3"></div>
+                    <div id="empty-history" class="text-center py-12 hidden">
+                        <svg class="w-16 h-16 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <p class="text-slate-500 text-sm">No hay resúmenes guardados</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content glass">
+            <div class="p-5 border-b border-slate-200">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-slate-800">Configuración</h3>
+                    <button onclick="closeSettings()" class="text-slate-500 hover:text-slate-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-5 space-y-5">
+                <div>
+                    <label class="text-sm font-medium text-slate-700 block mb-2">API de Resumen</label>
+                    <select id="api-provider" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3">
+                        <option value="openai">OpenAI (GPT-4o-mini)</option>
+                        <option value="gemini">Google Gemini</option>
+                    </select>
+                    
+                    <label class="text-sm font-medium text-slate-700 block mb-2">API Key</label>
+                    <input type="password" id="api-key" placeholder="sk-... o AIza..." class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <p class="text-xs text-slate-500 mt-2">Tu key se guarda localmente en el dispositivo</p>
+                </div>
+
+                <div>
+                    <label class="text-sm font-medium text-slate-700 block mb-2">Longitud del Resumen</label>
+                    <select id="summary-length" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="short">Corto (2-3 párrafos)</option>
+                        <option value="medium" selected>Medio (4-5 párrafos)</option>
+                        <option value="long">Extenso (6-8 párrafos)</option>
+                    </select>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200">
+                    <button onclick="saveSettings()" class="btn w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg">
+                        Guardar Configuración
+                    </button>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200">
+                    <h4 class="text-sm font-semibold text-slate-700 mb-3">📱 Compilar con Capacitor</h4>
+                    <div class="text-xs text-slate-600 space-y-2 bg-slate-50 p-3 rounded-lg">
+                        <p><code class="bg-white px-2 py-0.5 rounded">npm i @capacitor/core @capacitor/cli</code></p>
+                        <p><code class="bg-white px-2 py-0.5 rounded">npx cap init PDFSum com.app.pdfsum</code></p>
+                        <p><code class="bg-white px-2 py-0.5 rounded">npm i @capacitor/filesystem @capacitor/preferences @capacitor/share</code></p>
+                        <p><code class="bg-white px-2 py-0.5 rounded">npx cap add android</code> o <code class="bg-white px-2 py-0.5 rounded">ios</code></p>
+                        <p><code class="bg-white px-2 py-0.5 rounded">npx cap sync && npx cap open android</code></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script type="module">
+        // PDF.js worker setup
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Capacitor imports - funciona en nativo y web con fallbacks
+        let Capacitor, Filesystem, Preferences, Share;
+        let isCapacitor = false;
+
+        try {
+            const capCore = await import('https://cdn.jsdelivr.net/npm/@capacitor/core@6/+esm');
+            Capacitor = capCore.Capacitor;
+            isCapacitor = Capacitor.isNativePlatform();
+            
+            if (isCapacitor) {
+                const fs = await import('https://cdn.jsdelivr.net/npm/@capacitor/filesystem@6/+esm');
+                const prefs = await import('https://cdn.jsdelivr.net/npm/@capacitor/preferences@6/+esm');
+                const shareModule = await import('https://cdn.jsdelivr.net/npm/@capacitor/share@6/+esm');
+                
+                Filesystem = fs.Filesystem;
+                Preferences = prefs.Preferences;
+                Share = shareModule.Share;
+            }
+        } catch (e) {
+            console.log('Capacitor no disponible, modo web');
+        }
+
+        // Estado global
+        let currentFile = null;
+        let currentFileData = null;
+        let extractedText = '';
+        let currentSummary = '';
+        let settings = {
+            apiProvider: 'openai',
+            apiKey: '',
+            summaryLength: 'medium'
+        };
+
+        // Inicialización
+        async function init() {
+            updatePlatformBadge();
+            await loadSettings();
+            await loadHistory();
+            setupEventListeners();
+        }
+
+        function updatePlatformBadge() {
+            const badge = document.getElementById('platform-badge');
+            if (isCapacitor) {
+                badge.textContent = `Capacitor • ${Capacitor.getPlatform()}`;
+                badge.className = 'text-green-400 text-xs mt-0.5';
+            } else {
+                badge.textContent = 'Modo Web • Fallbacks activos';
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                if (isCapacitor && Preferences) {
+                    const { value } = await Preferences.get({ key: 'pdfsum_settings' });
+                    if (value) settings = JSON.parse(value);
+                } else {
+                    const saved = localStorage.getItem('pdfsum_settings');
+                    if (saved) settings = JSON.parse(saved);
+                }
+                
+                document.getElementById('api-provider').value = settings.apiProvider;
+                document.getElementById('api-key').value = settings.apiKey;
+                document.getElementById('summary-length').value = settings.summaryLength;
+            } catch (e) {
+                console.error('Error loading settings:', e);
+            }
+        }
+
+        async function saveSettings() {
+            settings.apiProvider = document.getElementById('api-provider').value;
+            settings.apiKey = document.getElementById('api-key').value.trim();
+            settings.summaryLength = document.getElementById('summary-length').value;
+
+            try {
+                if (isCapacitor && Preferences) {
+                    await Preferences.set({
+                        key: 'pdfsum_settings',
+                        value: JSON.stringify(settings)
+                    });
+                } else {
+                    localStorage.setItem('pdfsum_settings', JSON.stringify(settings));
+                }
+                showToast('✓ Configuración guardada');
+                closeSettings();
+            } catch (e) {
+                showToast('✗ Error al guardar');
+            }
+        }
+
+        function setupEventListeners() {
+            const uploadZone = document.getElementById('upload-zone');
+            const fileInput = document.getElementById('file-input');
+
+            uploadZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileSelect);
+
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('border-blue-600');
+            });
+
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('border-blue-600');
+            });
+
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('border-blue-600');
+                if (e.dataTransfer.files.length > 0) {
+                    handleFile(e.dataTransfer.files[0]);
+                }
+            });
+        }
+
+        function handleFileSelect(e) {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        }
+
+        function handleFile(file) {
+            if (file.type !== 'application/pdf') {
+                showToast('⚠️ Solo se admiten archivos PDF');
+                return;
+            }
+
+            currentFile = file;
+            document.getElementById('file-name').textContent = file.name;
+            document.getElementById('file-size').textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            document.getElementById('file-info').classList.remove('hidden');
+            document.getElementById('process-btn').disabled = false;
+            document.getElementById('process-btn-text').textContent = 'Extraer y Resumir PDF';
+        }
+
+        function clearFile() {
+            currentFile = null;
+            currentFileData = null;
+            document.getElementById('file-input').value = '';
+            document.getElementById('file-info').classList.add('hidden');
+            document.getElementById('process-btn').disabled = true;
+            document.getElementById('process-btn-text').textContent = 'Selecciona un PDF primero';
+            document.getElementById('result-container').classList.add('hidden');
+        }
+
+        async function processPDF() {
+            if (!currentFile) return;
+            if (!settings.apiKey) {
+                showToast('⚠️ Configura tu API Key en ajustes');
+                showSettings();
+                return;
+            }
+
+            const progressContainer = document.getElementById('progress-container');
+            const processBtn = document.getElementById('process-btn');
+            
+            processBtn.disabled = true;
+            progressContainer.classList.remove('hidden');
+            document.getElementById('result-container').classList.add('hidden');
+
+            try {
+                // 1. Leer archivo
+                updateProgress(10, 'Leyendo PDF...', '');
+                const arrayBuffer = await currentFile.arrayBuffer();
+                currentFileData = arrayBuffer;
+
+                // 2. Extraer texto
+                const extractMode = document.querySelector('input[name="extract-mode"]:checked').value;
+                updateProgress(20, 'Extrayendo contenido...', 'Analizando páginas');
+                
+                if (extractMode === 'ocr') {
+                    extractedText = await extractWithOCR(arrayBuffer);
+                } else if (extractMode === 'text') {
+                    extractedText = await extractTextFromPDF(arrayBuffer);
+                } else {
+                    // Auto: intenta texto primero, si es muy poco usa OCR
+                    extractedText = await extractTextFromPDF(arrayBuffer);
+                    if (extractedText.trim().length < 100) {
+                        updateProgress(40, 'Poco texto detectado, usando OCR...', '');
+                        extractedText = await extractWithOCR(arrayBuffer);
+                    }
+                }
+
+                if (!extractedText || extractedText.trim().length < 20) {
+                    throw new Error('No se pudo extraer texto del PDF');
+                }
+
+                updateProgress(70, 'Texto extraído', `${extractedText.length} caracteres`);
+
+                // 3. Generar resumen con IA
+                updateProgress(75, 'Generando resumen con IA...', `${settings.apiProvider.toUpperCase()}`);
+                currentSummary = await generateSummary(extractedText);
+
+                updateProgress(95, 'Guardando...', '');
+                await saveToHistory(currentFile.name, extractedText.length, currentSummary);
+
+                updateProgress(100, 'Completado', '');
+                
+                setTimeout(() => {
+                    progressContainer.classList.add('hidden');
+                    showResult(currentSummary, extractedText.length);
+                    processBtn.disabled = false;
+                }, 500);
+
+            } catch (err) {
+                console.error(err);
+                showToast('✗ ' + err.message);
+                progressContainer.classList.add('hidden');
+                processBtn.disabled = false;
+            }
+        }
+
+        async function extractTextFromPDF(arrayBuffer) {
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                const pageText = content.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n\n';
+                
+                updateProgress(
+                    20 + (i / pdf.numPages) * 30,
+                    'Extrayendo texto...',
+                    `Página ${i}/${pdf.numPages}`
+                );
+            }
+            
+            return fullText;
+        }
+
+        async function extractWithOCR(arrayBuffer) {
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            const lang = document.getElementById('ocr-lang').value;
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                updateProgress(
+                    20 + (i / pdf.numPages) * 30,
+                    'Procesando con OCR...',
+                    `Página ${i}/${pdf.numPages}`
+                );
+                
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 2.0 });
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                await page.render({ canvasContext: context, viewport }).promise;
+                
+                const { data: { text } } = await Tesseract.recognize(canvas, lang, {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            document.getElementById('progress-detail').textContent = 
+                                `OCR página ${i}: ${Math.round(m.progress * 100)}%`;
+                        }
+                    }
+                });
+                
+                fullText += text + '\n\n';
+            }
+            
+            return fullText;
+        }
+
+        async function generateSummary(text) {
+            const lengthGuide = {
+                short: 'en 2-3 párrafos concisos',
+                medium: 'en 4-5 párrafos detallados',
+                long: 'en 6-8 párrafos extensos con todos los puntos clave'
+            };
+
+            const prompt = `Resume el siguiente texto ${lengthGuide[settings.summaryLength]}. Extrae las ideas principales, conceptos clave y conclusiones. Mantén un tono profesional y claro:\n\n${text.substring(0, 40000)}`;
+
+            if (settings.apiProvider === 'openai') {
+                const res = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${settings.apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4o-mini',
+                        messages: [{ role: 'user', content: prompt }],
+                        temperature: 0.3
+                    })
+                });
+
+                if (!res.ok) throw new Error('Error API OpenAI: ' + res.status);
+                const data = await res.json();
+                return data.choices[0].message.content;
+            } else {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${settings.apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                if (!res.ok) throw new Error('Error API Gemini: ' + res.status);
+                const data = await res.json();
+                return data.candidates[0].content.parts[0].text;
+            }
+        }
+
+        function updateProgress(percent, text, detail) {
+            document.getElementById('progress-bar').style.width = percent + '%';
+            document.getElementById('progress-percent').textContent = percent + '%';
+            document.getElementById('progress-text').textContent = text;
+            document.getElementById('progress-detail').textContent = detail;
+        }
+
+        function showResult(summary, textLength) {
+            document.getElementById('summary-content').textContent = summary;
+            document.getElementById('result-stats').textContent = `${Math.round(textLength / 1000)}k chars`;
+            document.getElementById('result-container').classList.remove('hidden');
+        }
+
+        async function saveToHistory(fileName, textLength, summary) {
+            try {
+                const history = await getHistory();
+                const entry = {
+                    id: Date.now(),
+                    fileName,
+                    textLength,
+                    summary,
+                    date: new Date().toISOString()
+                };
+                history.unshift(entry);
+                
+                // Mantener solo últimos 50
+                if (history.length > 50) history.pop();
+                
+                if (isCapacitor && Preferences) {
+                    await Preferences.set({
+                        key: 'pdfsum_history',
+                        value: JSON.stringify(history)
+                    });
+                } else {
+                    localStorage.setItem('pdfsum_history', JSON.stringify(history));
+                }
+                
+                await loadHistory();
+            } catch (e) {
+                console.error('Error saving history:', e);
+            }
+        }
+
+        async function getHistory() {
+            try {
+                if (isCapacitor && Preferences) {
+                    const { value } = await Preferences.get({ key: 'pdfsum_history' });
+                    return value ? JSON.parse(value) : [];
+                } else {
+                    const saved = localStorage.getItem('pdfsum_history');
+                    return saved ? JSON.parse(saved) : [];
+                }
+            } catch (e) {
+                return [];
+            }
+        }
+
+        async function loadHistory() {
+            const history = await getHistory();
+            const list = document.getElementById('history-list');
+            const empty = document.getElementById('empty-history');
+            
+            if (history.length === 0) {
+                list.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            
+            empty.classList.add('hidden');
+            list.innerHTML = history.map(item => `
+                <div class="card-hover bg-slate-50 rounded-xl p-4 cursor-pointer" onclick="viewHistoryItem(${item.id})">
+                    <div class="flex items-start gap-3">
+                        <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-slate-800 text-sm truncate">${item.fileName}</p>
+                            <p class="text-xs text-slate-500 mt-1">${new Date(item.date).toLocaleDateString('es')} • ${Math.round(item.textLength / 1000)}k chars</p>
+                            <p class="text-xs text-slate-600 mt-2 line-clamp-2">${item.summary.substring(0, 100)}...</p>
+                        </div>
+                        <button onclick="deleteHistoryItem(event, ${item.id})" class="text-slate-400 hover:text-red-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.viewHistoryItem = async function(id) {
+            const history = await getHistory();
+            const item = history.find(h => h.id === id);
+            if (item) {
+                currentSummary = item.summary;
+                switchTab('upload');
+                showResult(item.summary, item.textLength);
+                showToast('📄 Resumen cargado');
+            }
+        }
+
+        window.deleteHistoryItem = async function(e, id) {
+            e.stopPropagation();
+            const history = await getHistory();
+            const filtered = history.filter(h => h.id !== id);
+            
+            if (isCapacitor && Preferences) {
+                await Preferences.set({
+                    key: 'pdfsum_history',
+                    value: JSON.stringify(filtered)
+                });
+            } else {
+                localStorage.setItem('pdfsum_history', JSON.stringify(filtered));
+            }
+            
+            await loadHistory();
+            showToast('✓ Eliminado');
+        }
+
+        window.clearHistory = async function() {
+            if (!confirm('¿Eliminar todo el historial?')) return;
+            
+            if (isCapacitor && Preferences) {
+                await Preferences.remove({ key: 'pdfsum_history' });
+            } else {
+                localStorage.removeItem('pdfsum_history');
+            }
+            
+            await loadHistory();
+            showToast('✓ Historial limpio');
+        }
+
+        window.copySummary = async function() {
+            try {
+                await navigator.clipboard.writeText(currentSummary);
+                showToast('✓ Copiado al portapapeles');
+            } catch (e) {
+                showToast('✗ Error al copiar');
+            }
+        }
+
+        window.shareSummary = async function() {
+            try {
+                if (isCapacitor && Share) {
+                    await Share.share({
+                        title: 'Resumen de PDF',
+                        text: currentSummary,
+                        dialogTitle: 'Compartir resumen'
+                    });
+                } else if (navigator.share) {
+                    await navigator.share({
+                        title: 'Resumen de PDF',
+                        text: currentSummary
+                    });
+                } else {
+                    await copySummary();
+                }
+            } catch (e) {
+                if (e.message !== 'Share canceled') {
+                    showToast('✗ Error al compartir');
+                }
+            }
+        }
+
+        window.switchTab = function(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('text-slate-600');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            
+            document.querySelector(`[data-tab="${tab}"]`).classList.add('tab-active');
+            document.querySelector(`[data-tab="${tab}"]`).classList.remove('text-slate-600');
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+        }
+
+        window.showSettings = function() {
+            document.getElementById('settings-modal').classList.add('show');
+        }
+
+        window.closeSettings = function() {
+            document.getElementById('settings-modal').classList.remove('show');
+        }
+
+        window.showToast = function(message, duration = 3000) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), duration);
+        }
+
+        // Exponer funciones globales
+        window.processPDF = processPDF;
+        window.clearFile = clearFile;
+        window.saveSettings = saveSettings;
+
+        /*
+        ============================================
+        GUÍA DE COMPILACIÓN CAPACITOR
+        ============================================
+        
+        1. SETUP INICIAL:
+           mkdir pdf-summarizer && cd pdf-summarizer
+           npm init -y
+           npm install @capacitor/core @capacitor/cli
+           
+        2. ARCHIVO DE CONFIGURACIÓN (capacitor.config.ts):
+           import { CapacitorConfig } from '@capacitor/cli';
+           const config: CapacitorConfig = {
+             appId: 'com.pdfsummarizer.app',
+             appName: 'PDF Summarizer',
+             webDir: 'www',
+             server: {
+               androidScheme: 'https'
+             },
+             plugins: {
+               SplashScreen: {
+                 launchShowDuration: 2000,
+                 backgroundColor: "#0f172a"
+               }
+             }
+           };
+           export default config;
+           
+        3. INSTALAR PLUGINS:
+           npm install @capacitor/filesystem @capacitor/preferences @capacitor/share @capacitor/splash-screen
+           npm install @capacitor/android @capacitor/ios
+           
+        4. AÑADIR PLATAFORMAS:
+           npx cap add android
+           npx cap add ios
+           
+        5. MOVER ESTE HTML:
+           mkdir www
+           cp index.html www/
+           
+        6. SINCRONIZAR:
+           npx cap sync
+           
+        7. PERMISOS ANDROID (android/app/src/main/AndroidManifest.xml):
+           <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+           <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+           <uses-permission android:name="android.permission.INTERNET" />
+           
+        8. PERMISOS iOS (ios/App/App/Info.plist):
+           <key>NSCameraUsageDescription</key>
+           <string>Para OCR de documentos</string>
+           <key>NSPhotoLibraryUsageDescription</key>
+           <string>Para seleccionar PDFs</string>
+           
+        9. COMPILAR:
+           npx cap open android  // Abre Android Studio
+           npx cap open ios      // Abre Xcode
+           
+        10. BUILD RELEASE:
+            Android: Build > Generate Signed Bundle en Android Studio
+            iOS: Product > Archive en Xcode
+            
+        NOTAS IMPORTANTES:
+        - PDF.js y Tesseract.js cargan desde CDN, asegúrate de tener internet
+        - Para uso offline, descarga los workers y hostéalos en www/
+        - Las API Keys se guardan en Preferences (seguro en nativo)
+        - Tesseract.js pesa ~2MB, considera lazy loading para apps pequeñas
+        - OCR es intensivo: usa Web Workers en producción
+        */
+
+        // Inicializar app
+        init();
+    </script>
+<script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
+</body>
+</html>
